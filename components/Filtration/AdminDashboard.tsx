@@ -2,8 +2,6 @@
 import React, { useState } from 'react';
 import { GoogleGenAI } from "@google/genai";
 
-declare var process: any;
-
 interface AdminDashboardProps {
   onBack: () => void;
 }
@@ -34,6 +32,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
 
     try {
       // Create a new instance right before the call as per guidelines
+      // @ts-ignore
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
