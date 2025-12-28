@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { UserProfile, ProjectEvaluationResult, ApplicantProfile } from '../types';
 import { evaluateProjectIdea } from '../services/geminiService';
 import { playPositiveSound, playCelebrationSound, playErrorSound } from '../services/audioService';
@@ -36,6 +36,7 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister }) => {
   });
   
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   
@@ -47,14 +48,34 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister }) => {
     ind.label.includes(searchTerm)
   );
 
-  const validate = () => {
+  // Real-time validation
+  useEffect(() => {
     const newErrors: Record<string, string> = {};
-    if (!formData.name.trim()) newErrors.name = 'يرجى إدخل اسم رائد الأعمال';
+    if (touched.name && !formData.name.trim()) newErrors.name = 'يرجى إدخال اسم رائد الأعمال';
+    if (touched.startupName && !formData.startupName.trim()) newErrors.startupName = 'يرجى إدخال اسم المشروع';
+    if (touched.startupDescription) {
+      if (!formData.startupDescription.trim()) {
+        newErrors.startupDescription = 'يرجى إدخال وصف الفكرة';
+      } else if (formData.startupDescription.length < 20) {
+        newErrors.startupDescription = 'وصف الفكرة قصير جداً (20 حرفاً على الأقل)';
+      }
+    }
+    setErrors(newErrors);
+  }, [formData, touched]);
+
+  const handleBlur = (field: string) => {
+    setTouched(prev => ({ ...prev, [field]: true }));
+  };
+
+  const validateOnSubmit = () => {
+    const allFieldsTouched = { name: true, startupName: true, startupDescription: true };
+    setTouched(allFieldsTouched);
+    
+    const newErrors: Record<string, string> = {};
+    if (!formData.name.trim()) newErrors.name = 'يرجى إدخال اسم رائد الأعمال';
     if (!formData.startupName.trim()) newErrors.startupName = 'يرجى إدخال اسم المشروع';
-    if (!formData.startupDescription.trim()) {
-      newErrors.startupDescription = 'يرجى إدخال وصف الفكرة';
-    } else if (formData.startupDescription.length < 20) {
-      newErrors.startupDescription = 'وصف الفكرة قصير جداً (يجب أن يكون 20 حرفاً على الأقل)';
+    if (!formData.startupDescription.trim() || formData.startupDescription.length < 20) {
+      newErrors.startupDescription = 'وصف الفكرة غير مكتمل أو قصير جداً';
     }
 
     setErrors(newErrors);
@@ -62,13 +83,12 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister }) => {
   };
 
   const handleAnalyzeIdea = async () => {
+    setTouched(prev => ({ ...prev, startupDescription: true }));
     if (!formData.startupDescription || formData.startupDescription.length < 20) {
-      setErrors(prev => ({ ...prev, startupDescription: 'يرجى كتابة 20 حرفاً على الأقل للتحليل' }));
       playErrorSound();
       return;
     }
     
-    setErrors(prev => ({ ...prev, startupDescription: '' }));
     setIsAnalyzing(true);
     playPositiveSound();
 
@@ -93,7 +113,7 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister }) => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (validate()) {
+    if (validateOnSubmit()) {
       onRegister(formData);
     } else {
       playErrorSound();
@@ -114,6 +134,15 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister }) => {
 
   return (
     <div className="min-h-screen flex bg-white font-sans">
+      <style>{`
+        @keyframes shake {
+          0%, 100% { transform: translateX(0); }
+          25% { transform: translateX(-4px); }
+          75% { transform: translateX(4px); }
+        }
+        .animate-shake { animation: shake 0.2s ease-in-out 2; }
+      `}</style>
+
       {/* Left Side - Visual & Branding */}
       <div className="hidden lg:flex lg:w-1/2 relative bg-blue-900 overflow-hidden flex-col justify-between p-12 text-white">
         <div className="absolute inset-0 z-0 opacity-20">
@@ -188,50 +217,66 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister }) => {
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="group">
-              <label className="block text-sm font-semibold text-gray-700 mb-2 group-focus-within:text-blue-600 transition-colors">اسم رائد الأعمال</label>
+              <div className="flex justify-between items-center mb-2">
+                <label className="block text-sm font-semibold text-gray-700 group-focus-within:text-blue-600 transition-colors">اسم رائد الأعمال</label>
+                {errors.name && (
+                  <span className="text-[10px] font-bold text-red-500 bg-red-50 px-2 py-1 rounded-md animate-fade-in">
+                    {errors.name}
+                  </span>
+                )}
+              </div>
               <div className="relative">
                 <input
                   type="text"
-                  className={`w-full pl-4 pr-10 py-3 bg-gray-50 border rounded-xl focus:bg-white focus:ring-2 outline-none transition-all duration-200 
-                    ${errors.name ? 'border-red-500 focus:ring-red-200' : 'border-gray-200 focus:ring-blue-500/20 focus:border-blue-500'}`}
+                  onBlur={() => handleBlur('name')}
+                  className={`w-full pl-10 pr-4 py-3 bg-gray-50 border rounded-xl focus:bg-white focus:ring-4 outline-none transition-all duration-300 
+                    ${errors.name ? 'border-red-500 ring-red-500/10 animate-shake' : touched.name && formData.name.trim() ? 'border-green-500 ring-green-500/10' : 'border-gray-200 focus:ring-blue-500/20 focus:border-blue-500'}`}
                   placeholder="الاسم الثلاثي"
                   value={formData.name}
                   onChange={(e) => {
                     setFormData({ ...formData, name: e.target.value });
-                    if (errors.name) setErrors({ ...errors, name: '' });
                   }}
                 />
-                <div className="absolute left-3 top-3.5 text-gray-400">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
-                  </svg>
+                <div className={`absolute left-3 top-3.5 transition-colors duration-300 ${errors.name ? 'text-red-500' : touched.name && formData.name.trim() ? 'text-green-500' : 'text-gray-400'}`}>
+                  {errors.name ? (
+                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                  ) : (
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
+                    </svg>
+                  )}
                 </div>
               </div>
-              {errors.name && <p className="text-red-500 text-xs mt-1 mr-1 animate-pulse">{errors.name}</p>}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="group">
-                <label className="block text-sm font-semibold text-gray-700 mb-2 group-focus-within:text-blue-600 transition-colors">اسم المشروع</label>
+                <div className="flex justify-between items-center mb-2">
+                  <label className="block text-sm font-semibold text-gray-700 group-focus-within:text-blue-600 transition-colors">اسم المشروع</label>
+                  {errors.startupName && (
+                    <span className="text-[10px] font-bold text-red-500 bg-red-50 px-2 py-1 rounded-md animate-fade-in">خطأ في الاسم</span>
+                  )}
+                </div>
                 <div className="relative">
                   <input
                     type="text"
-                    className={`w-full pl-4 pr-10 py-3 bg-gray-50 border rounded-xl focus:bg-white focus:ring-2 outline-none transition-all duration-200 
-                      ${errors.startupName ? 'border-red-500 focus:ring-red-200' : 'border-gray-200 focus:ring-blue-500/20 focus:border-blue-500'}`}
-                    placeholder="اسم الشركة الناشئة"
+                    onBlur={() => handleBlur('startupName')}
+                    className={`w-full pl-10 pr-4 py-3 bg-gray-50 border rounded-xl focus:bg-white focus:ring-4 outline-none transition-all duration-300 
+                      ${errors.startupName ? 'border-red-500 ring-red-500/10 animate-shake' : touched.startupName && formData.startupName.trim() ? 'border-green-500 ring-green-500/10' : 'border-gray-200 focus:ring-blue-500/20 focus:border-blue-500'}`}
+                    placeholder="اسم الشركة"
                     value={formData.startupName}
                     onChange={(e) => {
                       setFormData({ ...formData, startupName: e.target.value });
-                      if (errors.startupName) setErrors({ ...errors, startupName: '' });
                     }}
                   />
-                   <div className="absolute left-3 top-3.5 text-gray-400">
+                   <div className={`absolute left-3 top-3.5 transition-colors duration-300 ${errors.startupName ? 'text-red-500' : touched.startupName && formData.startupName.trim() ? 'text-green-500' : 'text-gray-400'}`}>
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                       <path fillRule="evenodd" d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a1 1 0 110 2h-3a1 1 0 01-1-1v-2a1 1 0 00-1-1H9a1 1 0 00-1 1v2a1 1 0 01-1 1H4a1 1 0 110-2V4zm3 1h2v2H7V5zm2 4H7v2h2V9zm2-4h2v2h-2V5zm2 4h-2v2h2V9z" clipRule="evenodd" />
                     </svg>
                   </div>
                 </div>
-                {errors.startupName && <p className="text-red-500 text-xs mt-1 mr-1 animate-pulse">{errors.startupName}</p>}
               </div>
 
               <div className="group relative">
@@ -248,7 +293,7 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister }) => {
                       setIsDropdownOpen(!isDropdownOpen);
                       if (!isDropdownOpen) setSearchTerm('');
                     }}
-                    className="w-full pl-4 pr-10 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all duration-200 text-right flex items-center justify-between text-gray-800"
+                    className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all duration-300 text-right flex items-center justify-between text-gray-800"
                   >
                     <span className="truncate">
                       {INDUSTRIES.find(i => i.value === formData.industry)?.label || formData.industry}
@@ -318,39 +363,45 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister }) => {
                 <label className="block text-sm font-semibold text-gray-700 group-focus-within:text-blue-600 transition-colors">
                   وصف الفكرة
                 </label>
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full transition-colors duration-300 ${isDescValid ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                  {descLength} / 20 حرف كحد أدنى
-                </span>
+                {errors.startupDescription && (
+                  <span className="text-[10px] font-bold text-red-500 bg-red-50 px-2 py-1 rounded-md animate-fade-in">
+                    {errors.startupDescription}
+                  </span>
+                )}
+                {!errors.startupDescription && (
+                  <span className={`text-[10px] font-bold px-2 py-1 rounded-full transition-all duration-500 ${isDescValid ? 'bg-green-100 text-green-700' : 'bg-blue-50 text-blue-500'}`}>
+                    {descLength} / 20 حرف
+                  </span>
+                )}
               </div>
               <div className="relative">
                 <textarea
                   rows={4}
-                  className={`w-full px-4 py-3 bg-gray-50 border rounded-xl focus:bg-white focus:ring-2 outline-none transition-all duration-200 resize-none 
-                    ${errors.startupDescription ? 'border-red-500 focus:ring-red-200' : 'border-gray-200 focus:ring-blue-500/20 focus:border-blue-500'}`}
+                  onBlur={() => handleBlur('startupDescription')}
+                  className={`w-full px-6 py-4 bg-gray-50 border rounded-xl focus:bg-white focus:ring-4 outline-none transition-all duration-300 resize-none 
+                    ${errors.startupDescription ? 'border-red-500 ring-red-500/10 animate-shake' : isDescValid ? 'border-green-500 ring-green-500/10' : 'border-gray-200 focus:ring-blue-500/20 focus:border-blue-500'}`}
                   placeholder="اشرح المشكلة التي تحلها والحل المقترح..."
                   value={formData.startupDescription}
                   onChange={(e) => {
                     setFormData({ ...formData, startupDescription: e.target.value });
-                    if (errors.startupDescription) setErrors({ ...errors, startupDescription: '' });
                     if (analysisResult) setAnalysisResult(null);
                   }}
                 />
-                <div className="absolute bottom-0 right-0 left-0 h-1 overflow-hidden rounded-b-xl pointer-events-none">
+                <div className="absolute bottom-0 right-0 left-0 h-1.5 overflow-hidden rounded-b-xl pointer-events-none">
                   <div 
-                    className={`h-full transition-all duration-500 ${isDescValid ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]' : 'bg-blue-400 opacity-40'}`} 
+                    className={`h-full transition-all duration-700 ${isDescValid ? 'bg-green-500' : 'bg-blue-500'}`} 
                     style={{ width: `${Math.min((descLength / 20) * 100, 100)}%` }}
                   ></div>
                 </div>
               </div>
-              {errors.startupDescription && <p className="text-red-500 text-xs mt-1 mr-1 animate-pulse">{errors.startupDescription}</p>}
               
               {/* AI Analysis Button */}
-              <div className="mt-2 flex justify-end">
+              <div className="mt-3 flex justify-end">
                 <button
                   type="button"
                   onClick={handleAnalyzeIdea}
                   disabled={isAnalyzing}
-                  className="text-sm bg-indigo-50 text-indigo-700 hover:bg-indigo-100 px-4 py-2 rounded-lg font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  className="text-xs bg-indigo-50 text-indigo-700 hover:bg-indigo-100 px-4 py-2 rounded-lg font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 >
                   {isAnalyzing ? (
                     <>
@@ -362,7 +413,7 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister }) => {
                       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                       </svg>
-                      تحليل الفكرة بالذكاء الاصطناعي
+                      تحليل ذكي للفكرة
                     </>
                   )}
                 </button>
@@ -375,34 +426,30 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister }) => {
                  <div className="flex justify-between items-start mb-3">
                     <h3 className="font-bold flex items-center gap-2">
                       <span className="text-xl">🤖</span>
-                      نتيجة تحليل الفكرة
+                      نتيجة التحليل
                     </h3>
-                    <div className={`px-3 py-1 rounded-full text-xs font-bold ${
+                    <div className={`px-3 py-1 rounded-full text-[10px] font-black ${
                       analysisResult.classification === 'Green' ? 'bg-green-200 text-green-800' :
                       analysisResult.classification === 'Yellow' ? 'bg-yellow-200 text-yellow-800' : 'bg-red-200 text-red-800'
                     }`}>
-                       {analysisResult.totalScore}/100 - {
-                         analysisResult.classification === 'Green' ? 'فكرة واعدة' :
-                         analysisResult.classification === 'Yellow' ? 'تحتاج تطوير' : 'غير واضحة'
-                       }
+                       {analysisResult.totalScore}/100
                     </div>
                  </div>
-                 <p className="text-sm opacity-90 leading-relaxed mb-4">
+                 <p className="text-xs opacity-90 leading-relaxed mb-4">
                    "{analysisResult.aiOpinion}"
                  </p>
                  
-                 {/* Mini Stats */}
-                 <div className="grid grid-cols-2 gap-3 text-xs">
+                 <div className="grid grid-cols-2 gap-3 text-[10px]">
                    <div>
-                     <span className="block opacity-70">الجدوى السوقية</span>
-                     <div className="w-full bg-black/5 h-1.5 rounded-full mt-1">
-                       <div className="bg-current h-1.5 rounded-full" style={{width: `${(analysisResult.market / 20) * 100}%`}}></div>
+                     <span className="block opacity-70 mb-1">الجدوى السوقية</span>
+                     <div className="w-full bg-black/5 h-1 rounded-full">
+                       <div className="bg-current h-1 rounded-full transition-all duration-1000" style={{width: `${(analysisResult.market / 20) * 100}%`}}></div>
                      </div>
                    </div>
                    <div>
-                     <span className="block opacity-70">الابتكار</span>
-                     <div className="w-full bg-black/5 h-1.5 rounded-full mt-1">
-                       <div className="bg-current h-1.5 rounded-full" style={{width: `${(analysisResult.innovation / 20) * 100}%`}}></div>
+                     <span className="block opacity-70 mb-1">الابتكار</span>
+                     <div className="w-full bg-black/5 h-1 rounded-full">
+                       <div className="bg-current h-1 rounded-full transition-all duration-1000" style={{width: `${(analysisResult.innovation / 20) * 100}%`}}></div>
                      </div>
                    </div>
                  </div>
@@ -411,16 +458,16 @@ export const Registration: React.FC<RegistrationProps> = ({ onRegister }) => {
 
             <button
               type="submit"
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl transition-all shadow-lg hover:shadow-blue-200 hover:-translate-y-0.5 active:translate-y-0 flex items-center justify-center gap-2 group"
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-4 rounded-xl transition-all shadow-lg hover:shadow-blue-200 hover:-translate-y-1 active:scale-95 flex items-center justify-center gap-3 group"
             >
-              <span>إنشاء حساب وبدء البرنامج</span>
+              <span>بدء البرنامج التدريبي</span>
               <svg className="w-5 h-5 group-hover:-translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
               </svg>
             </button>
             
-            <p className="text-center text-xs text-gray-400 mt-4">
-              بالتسجيل، أنت توافق على شروط الاستخدام وسياسة الخصوصية
+            <p className="text-center text-[10px] text-gray-400 mt-4 font-bold uppercase tracking-widest">
+              Business Developers Hub • AI Ecosystem
             </p>
           </form>
         </div>
