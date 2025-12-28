@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { LevelData, UserProfile, Question } from '../types';
 import { generateLevelMaterial, generateLevelQuiz, evaluateExerciseResponse } from '../services/geminiService';
 import { playPositiveSound, playErrorSound, playCelebrationSound } from '../services/audioService';
@@ -15,6 +15,7 @@ export const LevelView: React.FC<LevelViewProps> = ({ level, user, onComplete, o
   const [material, setMaterial] = useState<{ content: string; exercise: string } | null>(null);
   const [quiz, setQuiz] = useState<Question[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'content' | 'exercise' | 'quiz'>('content');
   
   // Exercise state
@@ -28,24 +29,34 @@ export const LevelView: React.FC<LevelViewProps> = ({ level, user, onComplete, o
   const [quizScore, setQuizScore] = useState(0);
   const [quizFinished, setQuizFinished] = useState(false);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      setIsLoading(true);
-      try {
-        const [mat, qz] = await Promise.all([
-          generateLevelMaterial(level.id, level.title, user),
-          generateLevelQuiz(level.id, level.title, user)
-        ]);
-        setMaterial(mat);
-        setQuiz(qz);
-      } catch (error) {
-        console.error("Failed to load level data", error);
-      } finally {
-        setIsLoading(false);
+  const fetchData = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      // Parallel execution with error check
+      const [mat, qz] = await Promise.all([
+        generateLevelMaterial(level.id, level.title, user),
+        generateLevelQuiz(level.id, level.title, user)
+      ]);
+
+      if (!mat || !qz) {
+        throw new Error("لم نتمكن من استلام بيانات صالحة من المعلم الذكي.");
       }
-    };
+
+      setMaterial(mat);
+      setQuiz(qz);
+    } catch (err: any) {
+      console.error("Failed to load level data", err);
+      setError(err.message || "حدث خطأ غير متوقع أثناء تحميل محتوى المستوى.");
+      playErrorSound();
+    } finally {
+      setIsLoading(false);
+    }
+  }, [level.id, level.title, user]);
+
+  useEffect(() => {
     fetchData();
-  }, [level, user]);
+  }, [fetchData]);
 
   const handleExerciseSubmit = async () => {
     if (!exerciseAnswer.trim() || isEvaluating) return;
@@ -60,6 +71,8 @@ export const LevelView: React.FC<LevelViewProps> = ({ level, user, onComplete, o
       }
     } catch (e) {
       console.error(e);
+      setExerciseFeedback({ passed: false, feedback: "حدث خطأ أثناء تقييم الإجابة. يرجى المحاولة مرة أخرى." });
+      playErrorSound();
     } finally {
       setIsEvaluating(false);
     }
@@ -95,6 +108,34 @@ export const LevelView: React.FC<LevelViewProps> = ({ level, user, onComplete, o
       <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50">
         <div className="w-16 h-16 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mb-4"></div>
         <p className="text-slate-500 font-bold animate-pulse">جاري تحضير المحتوى التعليمي الذكي...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 p-6 text-center">
+        <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center text-red-600 mb-6">
+          <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+        </div>
+        <h2 className="text-2xl font-black text-slate-900 mb-2">عذراً، حدث خطأ</h2>
+        <p className="text-slate-500 mb-8 max-w-md">{error}</p>
+        <div className="flex gap-4">
+          <button 
+            onClick={onBack}
+            className="px-6 py-3 bg-white border border-slate-200 rounded-xl font-bold text-slate-600 hover:bg-slate-50 transition-colors"
+          >
+            العودة للوحة التحكم
+          </button>
+          <button 
+            onClick={fetchData}
+            className="px-8 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-100"
+          >
+            إعادة المحاولة
+          </button>
+        </div>
       </div>
     );
   }
