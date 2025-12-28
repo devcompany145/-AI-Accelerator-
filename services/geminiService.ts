@@ -2,6 +2,8 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { ApplicantProfile, UserProfile, ProjectEvaluationResult, Question, AnalyticalQuestion, FailureSimulation, GovStats } from "../types";
 
+declare var process: any;
+
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 const MODEL_NAME = "gemini-3-flash-preview";
 
